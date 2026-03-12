@@ -101,8 +101,8 @@ export GOOGLE_CLOUD_PROJECT=your-project-id
 
 ## Team
 
-- [Your Name] — Backend, AI integration
-- [Teammate Name] — Frontend, design
+- Arnav Nayak
+- Amvi Dwivedi
 
 ## License
 
