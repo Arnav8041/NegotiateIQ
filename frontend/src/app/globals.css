@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+/* Class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:is(.dark *));
+
+/* ─── Neo-Brutalism Design Tokens ─── */
+@theme inline {
+  /* Font */
+  --font-sans: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+
+  /* Brand colors */
+  --color-cream: #FFFDF5;
+  --color-charcoal: #1A1A1A;
+  --color-warm-white: #F5F0E8;
+  --color-coral: #FF6B6B;
+  --color-sunflower: #FFD93D;
+  --color-mint: #4ECDC4;
+
+  /* Hard offset shadows — zero blur, bottom-right */
+  --shadow-neo-sm: 4px 4px 0px #000;
+  --shadow-neo-md: 6px 6px 0px #000;
+  --shadow-neo-lg: 8px 8px 0px #000;
+  --shadow-neo-xl: 12px 12px 0px #000;
+
+  /* Custom animations */
+  --animate-spin-slow: spin-slow 8s linear infinite;
+  --animate-pulse-glow: pulse-glow 2.5s ease-in-out infinite;
+
+  @keyframes spin-slow {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% {
+      box-shadow: 6px 6px 0px #000;
+    }
+    50% {
+      box-shadow: 6px 6px 0px #000, 0 0 24px rgba(78, 205, 196, 0.5);
+    }
+  }
+
+  @keyframes pulse-glow-dark {
+    0%, 100% {
+      box-shadow: 6px 6px 0px #4ECDC4;
+    }
+    50% {
+      box-shadow: 6px 6px 0px #4ECDC4, 0 0 28px rgba(78, 205, 196, 0.6);
+    }
+  }
+}
+
+/* ─── Base Styles ─── */
+body {
+  font-family: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Grid Background Pattern ─── */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.dark .bg-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ─── Text Stroke (Display Typography Depth) ─── */
+.text-stroke {
+  -webkit-text-stroke: 2px black;
+  paint-order: stroke fill;
+}
+
+.text-stroke-lg {
+  -webkit-text-stroke: 3px black;
+  paint-order: stroke fill;
+}
+
+/* ─── Neo-Brutalist Button Push Effect ─── */
+.btn-push {
+  transition: transform 100ms ease-out, box-shadow 100ms ease-out;
+}
+
+.btn-push:active {
+  transform: translate(4px, 4px) !important;
+  box-shadow: 0px 0px 0px #000 !important;
+}
+
+/* ─── Dark Mode Colored Shadows ─── */
+.dark .shadow-dark-coral {
+  box-shadow: 4px 4px 0px #FF6B6B;
+}
+
+.dark .shadow-dark-mint {
+  box-shadow: 6px 6px 0px #4ECDC4;
+}
+
+.dark .shadow-dark-sunflower {
+  box-shadow: 4px 4px 0px #FFD93D;
+}
+
+/* Dark mode colored shadows — medium (6px) */
+.dark .shadow-dark-coral-md {
+  box-shadow: 6px 6px 0px #FF6B6B;
+}
+
+.dark .shadow-dark-sunflower-md {
+  box-shadow: 6px 6px 0px #FFD93D;
+}
+
+.dark .shadow-dark-mint-md {
+  box-shadow: 6px 6px 0px #4ECDC4;
+}
+
+/* Dark mode colored shadows — large (8px) */
+.dark .shadow-dark-coral-lg {
+  box-shadow: 8px 8px 0px #FF6B6B;
+}
+
+.dark .shadow-dark-sunflower-lg {
+  box-shadow: 8px 8px 0px #FFD93D;
+}
+
+.dark .shadow-dark-mint-lg {
+  box-shadow: 8px 8px 0px #4ECDC4;
+}
+
+/* Dark mode pulse glow uses teal-colored shadow */
+.dark .animate-pulse-glow {
+  animation: pulse-glow-dark 2.5s ease-in-out infinite;
+}
+
+/* ─── Reduced Motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin-slow,
+  .animate-pulse-glow {
+    animation: none !important;
+  }
+
+  .btn-push {
+    transition: none !important;
+  }
+}
