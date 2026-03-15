@@ -1,8 +1,21 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence, useInView } from "framer-motion";
 import { ArrowRight, Mic, Check } from "lucide-react";
+
+/* ─── Waveform Bar Patterns ─── */
+
+const barPatterns = [
+  [8, 28, 12, 36, 8],
+  [8, 36, 16, 24, 8],
+  [8, 20, 32, 16, 8],
+  [8, 40, 12, 28, 8],
+  [8, 16, 36, 20, 8],
+  [8, 32, 20, 40, 8],
+  [8, 24, 36, 12, 8],
+  [8, 36, 16, 32, 8],
+];
 
 /* ─── Scenario Data ─── */
 
@@ -59,7 +72,13 @@ const cardVariants = {
 
 /* ─── Component ─── */
 
-export default function Setup() {
+interface SetupProps {
+  sessionActive: boolean;
+  sessionCompleted: boolean;
+  onStartSession: () => void;
+}
+
+export default function Setup({ sessionActive, sessionCompleted, onStartSession }: SetupProps) {
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null);
   const [context, setContext] = useState("");
   const [contextStep, setContextStep] = useState<
@@ -68,7 +87,18 @@ export default function Setup() {
   const [showMic, setShowMic] = useState(false);
 
   const sectionRef = useRef(null);
+  const micAreaRef = useRef<HTMLDivElement>(null);
   const isInView = useInView(sectionRef, { once: true, amount: 0.15 });
+
+  /* Auto-scroll to mic button when it appears (not after session ends) */
+  useEffect(() => {
+    if (showMic && !sessionActive && !sessionCompleted) {
+      const timer = setTimeout(() => {
+        micAreaRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+  }, [showMic, sessionActive, sessionCompleted]);
 
   const handleSkip = () => {
     setShowMic(true);
@@ -86,7 +116,13 @@ export default function Setup() {
   };
 
   const handleMicClick = () => {
-    document.getElementById("session")?.scrollIntoView({ behavior: "smooth" });
+    onStartSession();
+    // Let the user see the mic → listening transform before scrolling
+    setTimeout(() => {
+      document
+        .getElementById("session")
+        ?.scrollIntoView({ behavior: "smooth" });
+    }, 1800);
   };
 
   return (
@@ -260,13 +296,16 @@ export default function Setup() {
         </div>
       </motion.div>
 
-      {/* ─── Mic Button ─── */}
-      <AnimatePresence>
-        {showMic && (
+      {/* ─── Mic Button → Listening Indicator Transform ─── */}
+      {!sessionCompleted && (
+      <div ref={micAreaRef}>
+      <AnimatePresence mode="wait">
+        {showMic && !sessionActive && (
           <motion.div
+            key="mic-button"
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0, opacity: 0 }}
+            exit={{ scale: 0.3, opacity: 0 }}
             transition={{
               type: "spring",
               stiffness: 300,
@@ -286,7 +325,53 @@ export default function Setup() {
             </button>
           </motion.div>
         )}
+
+        {showMic && sessionActive && (
+          <motion.div
+            key="listening-indicator"
+            initial={{ scale: 0.3, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{
+              type: "spring",
+              stiffness: 300,
+              damping: 22,
+              mass: 0.8,
+            }}
+            className="flex flex-col items-center mt-16"
+          >
+            {/* Listening Badge */}
+            <div className="flex items-center gap-2.5 border-4 border-black rounded-lg bg-white dark:bg-charcoal px-5 py-2.5 shadow-neo-sm mb-6">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-mint opacity-75" />
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-mint border border-black" />
+              </span>
+              <span className="font-black text-sm uppercase tracking-widest text-black dark:text-warm-white">
+                Listening
+              </span>
+            </div>
+
+            {/* Waveform Visualization */}
+            <div className="flex items-end gap-1 h-12">
+              {barPatterns.map((heights, i) => (
+                <motion.div
+                  key={i}
+                  animate={{ height: heights }}
+                  transition={{
+                    duration: 0.8 + i * 0.05,
+                    repeat: Infinity,
+                    repeatType: "loop" as const,
+                    ease: "easeInOut" as const,
+                    delay: i * 0.08,
+                  }}
+                  className="w-1.5 md:w-2 bg-coral border border-black rounded-sm"
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
+      </div>
+      )}
     </section>
   );
 }
