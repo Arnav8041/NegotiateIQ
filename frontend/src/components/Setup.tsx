@@ -72,13 +72,22 @@ const cardVariants = {
 
 /* ─── Component ─── */
 
+/* Map numeric scenario IDs to the string keys the backend expects */
+const scenarioKeyMap: Record<number, string> = {
+  1: "rent",
+  2: "salary",
+  3: "custom",
+};
+
 interface SetupProps {
   sessionActive: boolean;
   sessionCompleted: boolean;
   onStartSession: () => void;
+  onScenarioSelect: (scenario: string) => void;
+  onContextChange: (context: string) => void;
 }
 
-export default function Setup({ sessionActive, sessionCompleted, onStartSession }: SetupProps) {
+export default function Setup({ sessionActive, sessionCompleted, onStartSession, onScenarioSelect, onContextChange }: SetupProps) {
   const [selectedScenario, setSelectedScenario] = useState<number | null>(null);
   const [context, setContext] = useState("");
   const [contextStep, setContextStep] = useState<
@@ -171,7 +180,10 @@ export default function Setup({ sessionActive, sessionCompleted, onStartSession 
 
               {/* Card Body */}
               <motion.button
-                onClick={() => setSelectedScenario(scenario.id)}
+                onClick={() => {
+                  setSelectedScenario(scenario.id);
+                  onScenarioSelect(scenarioKeyMap[scenario.id] || "custom");
+                }}
                 animate={{
                   scale: isSelected ? 1.03 : 1,
                   opacity: hasSelection && !isSelected ? 0.5 : 1,
@@ -217,7 +229,10 @@ export default function Setup({ sessionActive, sessionCompleted, onStartSession 
 
         <textarea
           value={context}
-          onChange={(e) => setContext(e.target.value)}
+          onChange={(e) => {
+            setContext(e.target.value);
+            onContextChange(e.target.value);
+          }}
           placeholder="E.g., My landlord wants to raise rent from $1,400 to $1,650. I've been here 3 years..."
           className="w-full h-40 border-4 border-black rounded-lg p-4 font-bold text-base text-black dark:text-warm-white bg-white dark:bg-charcoal placeholder:text-black/30 dark:placeholder:text-warm-white/30 resize-none focus-visible:bg-sunflower/20 focus-visible:outline-none transition-colors duration-200"
         />

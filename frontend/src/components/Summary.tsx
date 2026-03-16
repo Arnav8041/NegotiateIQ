@@ -3,80 +3,15 @@
 import { useRef } from "react";
 import { motion, useInView } from "framer-motion";
 import { ArrowRight } from "lucide-react";
+import { SessionSummaryData } from "@/hooks/useCoachingSession";
 
-/* ─── Stats Data ─── */
+/* ─── Helpers ─── */
 
-const stats = [
-  {
-    label: "Tactics Detected",
-    value: "7",
-    bg: "bg-sunflower",
-    darkShadow: "shadow-dark-sunflower",
-  },
-  {
-    label: "Best Move",
-    value: "Bracketing",
-    bg: "bg-mint",
-    darkShadow: "shadow-dark-mint",
-  },
-  {
-    label: "Duration",
-    value: "4:32",
-    bg: "bg-coral",
-    darkShadow: "shadow-dark-coral",
-  },
-  {
-    label: "Offers Tracked",
-    value: "3",
-    bg: "bg-white dark:bg-charcoal",
-    darkShadow: "",
-    neutral: true,
-  },
-];
-
-/* ─── Dialogue Data ─── */
-
-type Speaker = "user" | "landlord";
-
-interface DialogueLine {
-  speaker: Speaker;
-  text: string;
+function formatDuration(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
-
-const dialogue: DialogueLine[] = [
-  {
-    speaker: "user",
-    text: "Hi, I wanted to discuss my lease renewal. I\u2019ve been here for three years and I saw the proposed increase to $1,650.",
-  },
-  {
-    speaker: "landlord",
-    text: "Yes, that reflects the current market rate for units in this building. Several comparable units are listed at that price.",
-  },
-  {
-    speaker: "user",
-    text: "I understand market rates have shifted, but I\u2019ve been a reliable tenant \u2014 always on time, no complaints. I\u2019d like to propose staying at $1,450.",
-  },
-  {
-    speaker: "landlord",
-    text: "I appreciate your tenancy, but $1,450 is quite far from what we need. I could consider $1,600 as a compromise.",
-  },
-  {
-    speaker: "user",
-    text: "What if we met closer to the middle? I could do $1,500 with a 14-month lease, giving you guaranteed occupancy through the slower winter months.",
-  },
-  {
-    speaker: "landlord",
-    text: "That\u2019s an interesting offer. The extended lease does have value for us. Let me think about it.",
-  },
-  {
-    speaker: "user",
-    text: "Take your time. I\u2019m also happy to handle minor maintenance myself, which saves your team time and money.",
-  },
-  {
-    speaker: "landlord",
-    text: "Alright, I think we can work with $1,500 on a 14-month term. I\u2019ll have the updated lease drawn up.",
-  },
-];
 
 /* ─── Animation Variants ─── */
 
@@ -113,15 +48,44 @@ const dialogueContainerVariants = {
 
 interface SummaryProps {
   onReset: () => void;
+  summaryData: SessionSummaryData | null;
 }
 
-export default function Summary({ onReset }: SummaryProps) {
+export default function Summary({ onReset, summaryData }: SummaryProps) {
   const sectionRef = useRef(null);
   const isInView = useInView(sectionRef, { once: true, amount: 0.08 });
 
-  const handleNewSession = () => {
-    onReset();
-  };
+  const counterpartyLabel = summaryData?.counterparty_label ?? "Other Party";
+
+  const stats = [
+    {
+      label: "Tactics Detected",
+      value: summaryData ? String(summaryData.tactics_detected) : "—",
+      bg: "bg-sunflower",
+      darkShadow: "shadow-dark-sunflower",
+    },
+    {
+      label: "Best Move",
+      value: summaryData?.best_move ?? "—",
+      bg: "bg-mint",
+      darkShadow: "shadow-dark-mint",
+    },
+    {
+      label: "Duration",
+      value: summaryData ? formatDuration(summaryData.duration_seconds) : "—",
+      bg: "bg-coral",
+      darkShadow: "shadow-dark-coral",
+    },
+    {
+      label: "Offers Tracked",
+      value: summaryData ? String(summaryData.offers_tracked) : "—",
+      bg: "bg-white dark:bg-charcoal",
+      darkShadow: "",
+      neutral: true,
+    },
+  ];
+
+  const dialogue = summaryData?.dialogue ?? [];
 
   return (
     <section
@@ -187,48 +151,54 @@ export default function Summary({ onReset }: SummaryProps) {
           animate={isInView ? "visible" : "hidden"}
           className="flex flex-col gap-5"
         >
-          {dialogue.map((line, i) => {
-            const isUser = line.speaker === "user";
+          {dialogue.length === 0 ? (
+            <p className="text-center font-bold text-black/30 dark:text-warm-white/30 py-10 uppercase tracking-wide text-sm">
+              No conversation recorded
+            </p>
+          ) : (
+            dialogue.map((line, i) => {
+              const isUser = line.speaker === "user";
 
-            return (
-              <motion.div
-                key={i}
-                variants={{
-                  hidden: { x: isUser ? -60 : 60, opacity: 0 },
-                  visible: {
-                    x: 0,
-                    opacity: 1,
-                    transition: {
-                      duration: 0.45,
-                      ease: "easeOut" as const,
+              return (
+                <motion.div
+                  key={i}
+                  variants={{
+                    hidden: { x: isUser ? -60 : 60, opacity: 0 },
+                    visible: {
+                      x: 0,
+                      opacity: 1,
+                      transition: {
+                        duration: 0.45,
+                        ease: "easeOut" as const,
+                      },
                     },
-                  },
-                }}
-                className={`flex flex-col ${
-                  isUser ? "items-start self-start" : "items-end self-end"
-                } max-w-[85%] md:max-w-[75%]`}
-              >
-                <span
-                  className={`font-black text-xs uppercase tracking-widest mb-1.5 ${
-                    isUser ? "text-mint" : "text-coral"
-                  }`}
+                  }}
+                  className={`flex flex-col ${
+                    isUser ? "items-start self-start" : "items-end self-end"
+                  } max-w-[85%] md:max-w-[75%]`}
                 >
-                  {isUser ? "You" : "Landlord"}
-                </span>
-                <div
-                  className={`border-4 border-black rounded-lg px-4 py-3 shadow-neo-sm ${
-                    isUser
-                      ? "bg-mint shadow-dark-mint"
-                      : "bg-coral shadow-dark-coral"
-                  }`}
-                >
-                  <p className="font-bold text-sm leading-relaxed text-black">
-                    {line.text}
-                  </p>
-                </div>
-              </motion.div>
-            );
-          })}
+                  <span
+                    className={`font-black text-xs uppercase tracking-widest mb-1.5 ${
+                      isUser ? "text-mint" : "text-coral"
+                    }`}
+                  >
+                    {isUser ? "You" : counterpartyLabel}
+                  </span>
+                  <div
+                    className={`border-4 border-black rounded-lg px-4 py-3 shadow-neo-sm ${
+                      isUser
+                        ? "bg-mint shadow-dark-mint"
+                        : "bg-coral shadow-dark-coral"
+                    }`}
+                  >
+                    <p className="font-bold text-sm leading-relaxed text-black">
+                      {line.text}
+                    </p>
+                  </div>
+                </motion.div>
+              );
+            })
+          )}
         </motion.div>
       </motion.div>
 
@@ -239,7 +209,7 @@ export default function Summary({ onReset }: SummaryProps) {
           isInView ? { scale: 1, opacity: 1 } : { scale: 0.8, opacity: 0 }
         }
         transition={{ delay: 2.2, duration: 0.35, ease: "easeOut" as const }}
-        onClick={handleNewSession}
+        onClick={onReset}
         className="btn-push flex items-center gap-3 bg-sunflower text-black border-4 border-black rounded-lg px-8 py-4 text-lg font-bold uppercase tracking-wide shadow-neo-md dark:shadow-dark-mint cursor-pointer"
       >
         Start New Session
