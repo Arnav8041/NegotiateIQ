@@ -196,7 +196,7 @@ negotiate-iq/
 
 The system uses a hybrid AI pipeline. Audio from the user's microphone is streamed over a WebSocket connection from the Next.js frontend to the FastAPI backend. The backend forwards the audio stream to the Gemini Live API, which performs real-time speech-to-text and conversational analysis. Transcript segments are then passed to Gemini 2.5 Flash (text model) with negotiation-specific system prompts to generate structured coaching cards. These cards are sent back to the frontend over the same WebSocket connection and rendered as an animated card stack using Framer Motion. When the session ends, a final summary request is made to Gemini to produce a comprehensive recap of the negotiation.
 
-![Architecture Diagram]()
+![Architecture Diagram](https://github.com/Arnav8041/NegotiateIQ/blob/7c1c64c1f82072a89844dd4c6a3effec13958ebf/Screenshot%202026-03-16%20185400.png)
 
 ---
 
