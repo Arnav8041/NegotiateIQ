@@ -21,6 +21,15 @@ type CardType =
   | "reinforcement"
   | "silence-cue";
 
+const VALID_CARD_TYPES = new Set<string>([
+  "counter-move",
+  "tactic-alert",
+  "data-point",
+  "suggestion",
+  "reinforcement",
+  "silence-cue",
+]);
+
 export interface CoachingCard {
   id: number;
   type: CardType;
@@ -53,6 +62,9 @@ const CARD_PRIORITY: Record<string, number> = {
   "counter-move":  5,
   "tactic-alert":  6,
 };
+
+/* API key for backend auth */
+const API_KEY = process.env.NEXT_PUBLIC_API_KEY || "";
 
 /* ─── Hook ─── */
 
@@ -178,14 +190,13 @@ export function useCoachingSession(scenario: string, context: string) {
 
             // Note-trigger phrase — ask backend to synthesise a key-insight card
             if (NOTE_PHRASES.some(p => lower.includes(p)) && ws.readyState === WebSocket.OPEN) {
-              console.log("Note trigger detected:", text);
+              console.log("Note trigger detected");
               ws.send(JSON.stringify({ type: "note_trigger" }));
               return; // don't also send as a conversation transcript
             }
 
             // Ignore fragments — need at least 4 words to be a meaningful utterance
             if (text && text.split(" ").length >= 4 && ws.readyState === WebSocket.OPEN) {
-              console.log("Sending transcript:", text);
               conversationRef.current.push(text);
               ws.send(JSON.stringify({ type: "transcript", text }));
             }
@@ -252,7 +263,10 @@ export function useCoachingSession(scenario: string, context: string) {
     try {
       const res = await fetch(`${httpBaseRef.current}/api/summary`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
+        },
         body: JSON.stringify({
           scenario,
           conversation: conversationRef.current,
@@ -277,19 +291,37 @@ export function useCoachingSession(scenario: string, context: string) {
       const httpBase = backendUrl.replace("ws://", "http://").replace("wss://", "https://").replace("/ws/session", "");
       httpBaseRef.current = httpBase;
 
+      // ── Setup call with auth ──
+      let sessionId = "";
       try {
-        await fetch(`${httpBase}/api/setup`, {
+        const setupRes = await fetch(`${httpBase}/api/setup`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(API_KEY ? { "X-API-Key": API_KEY } : {}),
+          },
           body: JSON.stringify({ scenario, context }),
         });
+        if (setupRes.ok) {
+          const setupData = await setupRes.json();
+          sessionId = setupData.session_id || "";
+        } else {
+          console.error("Setup call returned", setupRes.status);
+        }
       } catch (err) {
         console.error("Setup call failed:", err);
       }
 
       if (cancelled) return;
 
-      const ws = new WebSocket(backendUrl);
+      // ── WebSocket with auth and session ID ──
+      const wsParams = new URLSearchParams();
+      if (API_KEY) wsParams.set("api_key", API_KEY);
+      if (sessionId) wsParams.set("session_id", sessionId);
+      const separator = backendUrl.includes("?") ? "&" : "?";
+      const wsUrl = `${backendUrl}${separator}${wsParams.toString()}`;
+
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -303,13 +335,22 @@ export function useCoachingSession(scenario: string, context: string) {
         try {
           const data = JSON.parse(event.data);
 
+          // ── Validate coaching card messages ──
           if (data.type && data.heading && data.body) {
-            addCard(data.type, data.heading, data.body);
+            if (
+              VALID_CARD_TYPES.has(data.type) &&
+              typeof data.heading === "string" && data.heading.length <= 200 &&
+              typeof data.body === "string" && data.body.length <= 500
+            ) {
+              addCard(data.type as CardType, data.heading, data.body);
+            }
           }
 
+          // ── Validate session summary ──
           if (data.type === "session_summary") {
-            durationRef.current = data.duration_seconds ?? 0;
-            console.log("Session summary:", data);
+            const dur = data.duration_seconds;
+            durationRef.current = typeof dur === "number" && dur >= 0 ? dur : 0;
+            console.log("Session summary received");
           }
         } catch {
           // Not JSON — ignore

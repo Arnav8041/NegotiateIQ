@@ -1,11 +1,15 @@
 import asyncio
 import json
+import logging
 import time
 from google import genai
 from google.genai import types
 
-from app.config import GOOGLE_API_KEY
+from app.config import GOOGLE_API_KEY, GEMINI_TIMEOUT_SECONDS
 from app.prompts import get_prompt, get_live_prompt, CARD_FORMAT_INSTRUCTION
+from app.sanitize import sanitize_user_input, wrap_user_content
+
+logger = logging.getLogger(__name__)
 
 MODEL_LIVE = "gemini-2.5-flash-native-audio-latest"
 MODEL_TEXT = "gemini-2.5-flash"
@@ -50,7 +54,7 @@ class GeminiCoach:
         )
         self.session = await self.session_manager.__aenter__()
         self.live_active = True
-        print(f"Gemini Live session opened (scenario={self.scenario})")
+        logger.info("Gemini Live session opened (scenario=%s)", self.scenario)
 
     async def send_audio(self, chunk: bytes):
         if not self.live_active or not self.session:
@@ -68,8 +72,8 @@ class GeminiCoach:
             try:
                 await self._close_session()
                 await self.connect()
-            except Exception as e:
-                print(f"Live API connect failed: {e}")
+            except Exception:
+                logger.error("Live API connect failed", exc_info=True)
                 if self.running:
                     await asyncio.sleep(2)
                 continue
@@ -97,7 +101,7 @@ class GeminiCoach:
                     if sc.input_transcription and sc.input_transcription.text:
                         heard = sc.input_transcription.text.strip()
                         if heard:
-                            print(f"Heard: {heard}")
+                            logger.debug("Input transcription received (%d chars)", len(heard))
 
                     if sc.turn_complete:
                         coaching_text = thinking_buffer.strip() or transcription_buffer.strip()
@@ -105,55 +109,62 @@ class GeminiCoach:
                         transcription_buffer = ""
 
                         if coaching_text and len(coaching_text) > 10:
-                            print(f"Coaching analysis: {coaching_text[:150]}...")
+                            logger.info("Coaching analysis received (%d chars)", len(coaching_text))
                             card = await self._format_as_card(coaching_text)
                             if card is not None:
                                 self.cards_served += 1
-                                print(f"Sending card (Live API): {card['type']} — {card['heading']}")
-                                print("-" * 26)
+                                logger.info("Sending card (Live API): %s", card["type"])
                                 yield card
 
-            except Exception as e:
-                print(f"Live API session ended: {e}")
+            except Exception:
+                logger.error("Live API session ended", exc_info=True)
 
             self.live_active = False
 
             # reconnect delay
             if self.running:
-                print("Reconnecting Live API...")
+                logger.info("Reconnecting Live API...")
                 await asyncio.sleep(0.5)
 
     async def process_transcript(self, text: str) -> dict | None:
-        self.conversation_history.append(text)
+        sanitized = sanitize_user_input(text, max_length=500)
+        self.conversation_history.append(sanitized)
 
         recent = self.conversation_history[-20:]
         conversation = "\n".join(f"[{i+1}] {line}" for i, line in enumerate(recent))
 
+        wrapped_text = wrap_user_content(sanitized, tag="user_utterance", max_length=500)
+
         prompt = (
-            f"CONVERSATION SO FAR:\n{conversation}\n\n"
-            f"LATEST UTTERANCE:\n\"{text}\"\n\n"
+            f"CONVERSATION SO FAR:\n<user_utterance>\n{conversation}\n</user_utterance>\n\n"
+            f"LATEST UTTERANCE:\n{wrapped_text}\n\n"
             "Based on the latest utterance and conversation context, "
             "provide a coaching card or {\"type\": \"none\"} if no coaching needed."
         )
 
         try:
-            response = await self.client.aio.models.generate_content(
-                model=MODEL_TEXT,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.coaching_prompt,
-                    response_mime_type="application/json",
+            response = await asyncio.wait_for(
+                self.client.aio.models.generate_content(
+                    model=MODEL_TEXT,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self.coaching_prompt,
+                        response_mime_type="application/json",
+                    ),
                 ),
+                timeout=GEMINI_TIMEOUT_SECONDS,
             )
             card = self._parse_card(response.text)
             if card:
                 self.cards_served += 1
-                print(f"Sending card (text API): {card['type']} — {card['heading']}")
-                print("-" * 26)
+                logger.info("Sending card (text API): %s", card["type"])
             return card
 
-        except Exception as e:
-            print(f"Text API coaching error: {e}")
+        except asyncio.TimeoutError:
+            logger.error("Gemini API timed out during transcript processing")
+            return None
+        except Exception:
+            logger.error("Text API coaching error", exc_info=True)
             return None
 
     async def generate_note_cards(self) -> list[dict]:
@@ -164,48 +175,59 @@ class GeminiCoach:
         conversation = "\n".join(f"[{i+1}] {line}" for i, line in enumerate(recent))
 
         prompt = (
-            f"CONVERSATION SO FAR:\n{conversation}\n\n"
+            f"CONVERSATION SO FAR:\n<user_utterance>\n{conversation}\n</user_utterance>\n\n"
             "The user wants to note down the most important insights. "
-            "Identify up to 3 distinct key insights — specific numbers/offers, "
+            "Identify up to 3 distinct key insights \u2014 specific numbers/offers, "
             "tactics used, or leverage points. Return 1 to 3 coaching cards, most important first.\n\n"
             'Return ONLY: {"cards": [{"type":"...","heading":"...","body":"..."}, ...]}'
         )
 
         try:
-            response = await self.client.aio.models.generate_content(
-                model=MODEL_TEXT,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.coaching_prompt,
-                    response_mime_type="application/json",
+            response = await asyncio.wait_for(
+                self.client.aio.models.generate_content(
+                    model=MODEL_TEXT,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self.coaching_prompt,
+                        response_mime_type="application/json",
+                    ),
                 ),
+                timeout=GEMINI_TIMEOUT_SECONDS,
             )
             data = json.loads(response.text)
             raw_cards = data.get("cards", []) if isinstance(data, dict) else []
             cards = [c for c in (self._parse_card(json.dumps(rc)) for rc in raw_cards) if c]
             self.cards_served += len(cards)
             for card in cards:
-                print(f"Sending card (note trigger): {card['type']} — {card['heading']}")
-            print("-" * 26)
+                logger.info("Sending card (note trigger): %s", card["type"])
             return cards
-        except Exception as e:
-            print(f"Note cards error: {e}")
+        except asyncio.TimeoutError:
+            logger.error("Gemini API timed out during note card generation")
+            return []
+        except Exception:
+            logger.error("Note cards error", exc_info=True)
             return []
 
     async def _format_as_card(self, coaching_text: str) -> dict | None:
         prompt = f"COACHING ANALYSIS:\n{coaching_text}"
         try:
-            response = await self.client.aio.models.generate_content(
-                model=MODEL_TEXT,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    system_instruction=self.card_format_prompt,
-                    response_mime_type="application/json",
+            response = await asyncio.wait_for(
+                self.client.aio.models.generate_content(
+                    model=MODEL_TEXT,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        system_instruction=self.card_format_prompt,
+                        response_mime_type="application/json",
+                    ),
                 ),
+                timeout=GEMINI_TIMEOUT_SECONDS,
             )
             return self._parse_card(response.text)
-        except Exception as e:
-            print(f"Text model formatting error: {e}")
+        except asyncio.TimeoutError:
+            logger.error("Gemini API timed out during card formatting")
+            return None
+        except Exception:
+            logger.error("Text model formatting error", exc_info=True)
             return None
 
     def _parse_card(self, text: str) -> dict | None:
@@ -220,7 +242,7 @@ class GeminiCoach:
         try:
             data = json.loads(cleaned)
         except json.JSONDecodeError:
-            print(f"Text model returned non-JSON: {text[:100]}")
+            logger.warning("Text model returned non-JSON (%d chars)", len(text))
             return None
         if data.get("type") == "none":
             return None
@@ -255,4 +277,4 @@ class GeminiCoach:
         """Final cleanup."""
         self.running = False
         await self._close_session()
-        print("Gemini coach closed")
+        logger.info("Gemini coach closed")

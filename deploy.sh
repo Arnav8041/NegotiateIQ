@@ -9,12 +9,15 @@ echo "Deploying NegotiateIQ..."
 echo "  Project: ${PROJECT_ID}"
 echo "  Region:  ${REGION}"
 
+ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://negotiate-iq.vercel.app,http://localhost:3000}"
+MAX_WS_CONNECTIONS="${MAX_WS_CONNECTIONS:-10}"
+
 gcloud run deploy "${SERVICE_NAME}" \
   --source . \
   --region "${REGION}" \
   --allow-unauthenticated \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID}" \
-  --update-secrets "GOOGLE_API_KEY=negotiate-iq-gemini-key:latest" \
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},ENVIRONMENT=production,ALLOWED_ORIGINS=${ALLOWED_ORIGINS},MAX_WS_CONNECTIONS=${MAX_WS_CONNECTIONS}" \
+  --update-secrets "GOOGLE_API_KEY=negotiate-iq-gemini-key:latest,NEGOTIATEIQ_API_KEY=negotiate-iq-client-key:latest" \
   --memory 1Gi \
   --cpu 2 \
   --timeout 300 \

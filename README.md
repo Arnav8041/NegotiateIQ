@@ -26,9 +26,9 @@ NegotiateIQ listens to your live negotiations and shows you tactical coaching ca
 
 | Endpoint | URL |
 |----------|-----|
-| **Backend API** | https://negotiate-iq-backend-110141072488.us-central1.run.app |
-| **Health Check** | https://negotiate-iq-backend-110141072488.us-central1.run.app/health |
-| **API Docs (Swagger)** | https://negotiate-iq-backend-110141072488.us-central1.run.app/docs |
+| **Backend API** | `<YOUR_CLOUD_RUN_URL>` |
+| **Health Check** | `<YOUR_CLOUD_RUN_URL>/health` |
+| **API Docs (Swagger)** | `<YOUR_CLOUD_RUN_URL>/docs` (disabled in production) |
 
 ---
 
@@ -38,19 +38,15 @@ NegotiateIQ listens to your live negotiations and shows you tactical coaching ca
 
 1. Open the health endpoint in your browser:
    ```
-   https://negotiate-iq-backend-110141072488.us-central1.run.app/health
+   <YOUR_CLOUD_RUN_URL>/health
    ```
    You should see `{"healthy": true}`.
 
-2. Open `/docs` for the Swagger UI where you can test `/api/setup` and `/api/summary` directly:
-   ```
-   https://negotiate-iq-backend-110141072488.us-central1.run.app/docs
-   ```
-
-3. Or use curl to test the setup endpoint with a rent scenario:
+2. Test the setup endpoint with curl (API key required):
    ```bash
-   curl -X POST https://negotiate-iq-backend-110141072488.us-central1.run.app/api/setup \
+   curl -X POST <YOUR_CLOUD_RUN_URL>/api/setup \
      -H "Content-Type: application/json" \
+     -H "X-API-Key: your-api-key" \
      -d '{
        "scenario": "rent",
        "context": "My landlord wants to raise rent from $1,400 to $1,650. I have been a tenant for 3 years with no late payments."
@@ -74,9 +70,11 @@ NegotiateIQ listens to your live negotiations and shows you tactical coaching ca
    source venv/bin/activate       # Windows: venv\Scripts\activate
    pip install -r requirements.txt
    ```
-   Create a `.env` file in the `backend/` directory:
+   Create a `.env` file in the `backend/` directory (see `backend/.env.example`):
    ```
    GOOGLE_API_KEY=your-gemini-api-key
+   NEGOTIATEIQ_API_KEY=your-client-api-key
+   ALLOWED_ORIGINS=http://localhost:3000
    ```
    Then run the server:
    ```bash
@@ -89,7 +87,11 @@ NegotiateIQ listens to your live negotiations and shows you tactical coaching ca
    npm install
    npm run dev                    # -> http://localhost:3000
    ```
-   No `.env.local` file is needed -- the frontend defaults to `localhost:8000`.
+   Create a `.env.local` file in the `frontend/` directory:
+   ```
+   NEXT_PUBLIC_API_KEY=your-client-api-key
+   ```
+   The frontend defaults to `ws://localhost:8000/ws/session` for the backend URL.
 
 4. Walk through the full experience:
    - Open `http://localhost:3000` in Chrome
@@ -181,7 +183,9 @@ negotiate-iq/
 │   │   ├── main.py                     # FastAPI app, routes, WebSocket endpoint
 │   │   ├── gemini_client.py            # Gemini Live API and text API integration
 │   │   ├── prompts.py                  # System prompts for coaching card generation
-│   │   └── config.py                   # Environment variables and settings
+│   │   ├── config.py                   # Environment variables and settings
+│   │   ├── auth.py                     # API key authentication dependency
+│   │   └── sanitize.py                 # Input sanitization utilities
 │   ├── requirements.txt                # Python dependencies
 │   └── .env.example                    # Example environment variables
 ├── deploy.sh                           # One-command GCP Cloud Run deployment
@@ -205,6 +209,32 @@ The system uses a hybrid AI pipeline. Audio from the user's microphone is stream
 [📹 Demo video]
 
 [NegotiateIQ demo](https://youtu.be/qjwR6wuUp-I)
+---
+
+## Security
+
+NegotiateIQ includes the following security controls:
+
+- **API key authentication** -- All HTTP endpoints and WebSocket connections require a valid `X-API-Key` header (or `api_key` query parameter for WebSocket). Set `NEGOTIATEIQ_API_KEY` in your environment.
+- **CORS restrictions** -- Only origins listed in `ALLOWED_ORIGINS` can make cross-origin requests. Defaults to `http://localhost:3000` in development.
+- **Session isolation** -- Each `/api/setup` call returns a unique `session_id`. WebSocket connections are scoped to their session, preventing cross-user data leakage.
+- **Rate limiting** -- WebSocket connections are capped at `MAX_WS_CONNECTIONS` (default 10). Per-connection message rate limits prevent abuse.
+- **Input sanitization** -- All user-provided text (context, transcripts) is sanitized and length-limited before being used in LLM prompts. User content is wrapped in XML-style delimiters to defend against prompt injection.
+- **Security headers** -- Both backend and frontend set standard security headers (CSP, HSTS, X-Frame-Options, etc.).
+- **Non-root Docker** -- The production container runs as a non-root user.
+- **Structured logging** -- No stack traces or sensitive data are exposed in HTTP responses.
+
+### Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `GOOGLE_API_KEY` | Yes | Gemini API key |
+| `NEGOTIATEIQ_API_KEY` | Yes (prod) | Client-to-backend auth key |
+| `ALLOWED_ORIGINS` | No | Comma-separated CORS origins (default: `http://localhost:3000`) |
+| `ENVIRONMENT` | No | `development` or `production` (default: `development`) |
+| `MAX_WS_CONNECTIONS` | No | Max concurrent WebSocket connections (default: `10`) |
+| `GEMINI_TIMEOUT_SECONDS` | No | Gemini API call timeout (default: `30`) |
+
 ---
 
 ## Team
