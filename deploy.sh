@@ -9,7 +9,7 @@ echo "Deploying NegotiateIQ..."
 echo "  Project: ${PROJECT_ID}"
 echo "  Region:  ${REGION}"
 
-ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://negotiate-iq.vercel.app,http://localhost:3000}"
+ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-https://negotiateiq-app.vercel.app,http://localhost:3000}"
 MAX_WS_CONNECTIONS="${MAX_WS_CONNECTIONS:-10}"
 
 gcloud run deploy "${SERVICE_NAME}" \
